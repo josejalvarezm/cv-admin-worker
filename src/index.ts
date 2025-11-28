@@ -8,6 +8,41 @@ import { generateStableId, errorResponse, validateEntityId } from './utils';
 
 const app = new Hono<{ Bindings: Env }>();
 
+/**
+ * Fix encoding issues in strings (mojibake from UTF-8 misinterpretation)
+ * Common issues: ÔÇô → – (en-dash), ÔÇæ → (zero-width/space)
+ */
+function fixEncoding(text: string | null | undefined): string | null {
+  if (!text) return text as null;
+  return text
+    .replace(/ÔÇô/g, '–')      // en-dash
+    .replace(/ÔÇæ/g, '-')       // zero-width joiner → regular hyphen
+    .replace(/ÔÇö/g, '—')       // em-dash
+    .replace(/ÔÇÿ/g, "'")       // smart quote
+    .replace(/ÔÇ£/g, '"')       // smart quote open
+    .replace(/ÔÇØ/g, '"');      // smart quote close
+}
+
+/**
+ * Recursively fix encoding issues in an object
+ */
+function fixEncodingInObject<T>(obj: T): T {
+  if (typeof obj === 'string') {
+    return fixEncoding(obj) as T;
+  }
+  if (Array.isArray(obj)) {
+    return obj.map(item => fixEncodingInObject(item)) as T;
+  }
+  if (obj && typeof obj === 'object') {
+    const fixed: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(obj)) {
+      fixed[key] = fixEncodingInObject(value);
+    }
+    return fixed as T;
+  }
+  return obj;
+}
+
 // CORS middleware - credentials required for Zero Trust cookies
 app.use('*', cors({
   origin: ['https://admin.{YOUR_DOMAIN}', 'http://localhost:5173'],
@@ -457,19 +492,16 @@ app.get('/api/d1cv/technologies/with-ai-match', async (c) => {
       throw new Error(`D1CV returned ${d1cvResponse.status}`);
     }
     const d1cvData = await d1cvResponse.json() as {
-      heroSkills?: Array<{ id: number; name: string; [key: string]: unknown }>;
+      heroSkills?: Array<{ name: string; [key: string]: unknown }>;
       technologyCategories?: Array<{
         name: string;
         icon: string;
-        technologies: Array<{ id: number; name: string; [key: string]: unknown }>;
+        technologies: Array<{ name: string; [key: string]: unknown }>;
       }>;
     };
 
-    // Flatten D1CV response
-    const d1cvTechs: Array<{ id: number; name: string; category?: string; [key: string]: unknown }> = [];
-    if (d1cvData.heroSkills) {
-      d1cvTechs.push(...d1cvData.heroSkills);
-    }
+    // Flatten D1CV response - skip heroSkills (they're just highlighted duplicates)
+    const d1cvTechs: Array<{ name: string; category?: string; [key: string]: unknown }> = [];
     if (d1cvData.technologyCategories) {
       for (const cat of d1cvData.technologyCategories) {
         if (cat.technologies) {
@@ -547,7 +579,7 @@ app.get('/api/d1cv/technologies/with-ai-match', async (c) => {
       const aiMatch = findAiMatch(tech.name);
       return {
         ...tech,
-        aiMatch,
+        aiMatch: aiMatch ? fixEncodingInObject(aiMatch) : null,
         hasAiMatch: aiMatch !== null,
       };
     });
@@ -567,27 +599,55 @@ app.get('/api/d1cv/technologies/with-ai-match', async (c) => {
 });
 
 /**
- * GET /api/d1cv/technologies/:id
- * Fetch single technology from D1CV by ID
+ * GET /api/d1cv/technologies/:identifier
+ * Fetch single technology from D1CV by name (URL-encoded)
+ * D1CV v2 API doesn't include IDs, so we match by name
  */
-app.get('/api/d1cv/technologies/:id', async (c) => {
+app.get('/api/d1cv/technologies/:identifier', async (c) => {
   const d1cvUrl = c.env.D1CV_API_URL;
-  const id = c.req.param('id');
+  const identifier = decodeURIComponent(c.req.param('identifier'));
 
   if (!d1cvUrl) {
     return errorResponse('D1CV_API_URL not configured', 500);
   }
 
   try {
-    const response = await fetch(`${d1cvUrl}/api/technologies/${id}`);
+    // Fetch all technologies (D1CV doesn't have single-item endpoint)
+    const response = await fetch(`${d1cvUrl}/api/v2/cvs/1/technologies`);
     if (!response.ok) {
-      if (response.status === 404) {
-        return errorResponse('Technology not found', 404);
-      }
       throw new Error(`D1CV returned ${response.status}`);
     }
-    const data = await response.json();
-    return c.json(data);
+    
+    const data = await response.json() as {
+      heroSkills?: Array<{ name: string; [key: string]: unknown }>;
+      technologyCategories?: Array<{
+        name: string;
+        icon: string;
+        technologies: Array<{ name: string; [key: string]: unknown }>;
+      }>;
+    };
+
+    // Flatten categories only (skip heroSkills - they're just highlighted duplicates)
+    const allTechs: Array<{ name: string; category?: string; [key: string]: unknown }> = [];
+    
+    if (data.technologyCategories) {
+      for (const cat of data.technologyCategories) {
+        if (cat.technologies) {
+          allTechs.push(...cat.technologies.map(t => ({ ...t, category: cat.name })));
+        }
+      }
+    }
+
+    // Find by name (case-insensitive)
+    const technology = allTechs.find(t => 
+      t.name.toLowerCase() === identifier.toLowerCase()
+    );
+    
+    if (!technology) {
+      return errorResponse('Technology not found', 404);
+    }
+
+    return c.json(technology);
   } catch (error) {
     console.error('D1CV technology error:', error);
     return errorResponse(`Failed to fetch D1CV technology: ${error}`, 500);
@@ -649,7 +709,8 @@ app.get('/api/ai-agent/technologies', async (c) => {
       throw new Error(`AI Agent returned ${response.status}`);
     }
     const data = await response.json();
-    return c.json(data);
+    // Fix encoding issues in the response
+    return c.json(fixEncodingInObject(data));
   } catch (error) {
     console.error('AI Agent technologies error:', error);
     return errorResponse(`Failed to fetch AI Agent technologies: ${error}`, 500);
@@ -677,7 +738,8 @@ app.get('/api/ai-agent/technologies/:stableId', async (c) => {
       throw new Error(`AI Agent returned ${response.status}`);
     }
     const data = await response.json();
-    return c.json(data);
+    // Fix encoding issues in the response
+    return c.json(fixEncodingInObject(data));
   } catch (error) {
     console.error('AI Agent technology error:', error);
     return errorResponse(`Failed to fetch AI Agent technology: ${error}`, 500);
