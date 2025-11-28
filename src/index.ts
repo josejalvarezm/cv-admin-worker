@@ -438,6 +438,135 @@ app.get('/api/d1cv/technologies', async (c) => {
 });
 
 /**
+ * GET /api/d1cv/technologies/with-ai-match
+ * Fetch all technologies from D1CV with AI Agent match status
+ * Returns array of technologies with aiMatch field containing matched AI data or null
+ */
+app.get('/api/d1cv/technologies/with-ai-match', async (c) => {
+  const d1cvUrl = c.env.D1CV_API_URL;
+  const aiAgentUrl = c.env.AI_AGENT_API_URL;
+
+  if (!d1cvUrl) {
+    return errorResponse('D1CV_API_URL not configured', 500);
+  }
+
+  try {
+    // Fetch D1CV technologies
+    const d1cvResponse = await fetch(`${d1cvUrl}/api/v2/cvs/1/technologies`);
+    if (!d1cvResponse.ok) {
+      throw new Error(`D1CV returned ${d1cvResponse.status}`);
+    }
+    const d1cvData = await d1cvResponse.json() as {
+      heroSkills?: Array<{ id: number; name: string; [key: string]: unknown }>;
+      technologyCategories?: Array<{
+        name: string;
+        icon: string;
+        technologies: Array<{ id: number; name: string; [key: string]: unknown }>;
+      }>;
+    };
+
+    // Flatten D1CV response
+    const d1cvTechs: Array<{ id: number; name: string; category?: string; [key: string]: unknown }> = [];
+    if (d1cvData.heroSkills) {
+      d1cvTechs.push(...d1cvData.heroSkills);
+    }
+    if (d1cvData.technologyCategories) {
+      for (const cat of d1cvData.technologyCategories) {
+        if (cat.technologies) {
+          d1cvTechs.push(...cat.technologies.map(t => ({ ...t, category: cat.name })));
+        }
+      }
+    }
+
+    // Fetch AI Agent technologies (if configured)
+    let aiTechs: Array<{ name: string; stable_id: string; [key: string]: unknown }> = [];
+    if (aiAgentUrl) {
+      try {
+        const aiResponse = await fetch(`${aiAgentUrl}/api/technologies`);
+        if (aiResponse.ok) {
+          const aiData = await aiResponse.json() as { technologies?: Array<{ name: string; stable_id: string; [key: string]: unknown }> };
+          aiTechs = aiData.technologies || [];
+        }
+      } catch (aiError) {
+        console.warn('AI Agent fetch failed, continuing without AI data:', aiError);
+      }
+    }
+
+    /**
+     * Fuzzy matching function - finds best AI match for a D1CV technology
+     * Matches if:
+     * 1. Exact match (case-insensitive)
+     * 2. AI tech name starts with D1CV name (e.g., "Angular" matches "Angular 17")
+     * 3. D1CV name contains AI tech name (e.g., "AWS (Lambda, S3)" matches "AWS Lambda")
+     * 4. Acronym in parentheses matches (e.g., "Google Cloud Platform (GCP)" matches "GCP Firestore")
+     */
+    const findAiMatch = (d1cvName: string): Record<string, unknown> | null => {
+      const normalized = d1cvName.toLowerCase().trim();
+      
+      // Try exact match first
+      for (const aiTech of aiTechs) {
+        if (aiTech.name.toLowerCase().trim() === normalized) {
+          return aiTech;
+        }
+      }
+      
+      // Extract acronym from parentheses if present (e.g., "Google Cloud Platform (GCP)" -> "gcp")
+      const acronymMatch = normalized.match(/\(([^)]+)\)/);
+      const acronym = acronymMatch ? acronymMatch[1].toLowerCase() : null;
+      
+      // Try fuzzy match - check if D1CV name contains AI tech name
+      // e.g., "AWS (Lambda, S3, API Gateway)" should match "AWS Lambda"
+      for (const aiTech of aiTechs) {
+        const aiName = aiTech.name.toLowerCase().trim();
+        // Check if the D1CV name contains the core part of AI name
+        // Split by spaces and check if first word matches
+        const aiFirstWord = aiName.split(/[\s(]/)[0];
+        const d1cvFirstWord = normalized.split(/[\s(]/)[0];
+        
+        if (aiFirstWord === d1cvFirstWord && aiFirstWord.length >= 2) {
+          // First word matches - likely the same technology family
+          // For "AWS Lambda" matching "AWS (Lambda, S3)", check if Lambda is in the D1CV name
+          const aiKeyword = aiName.replace(aiFirstWord, '').trim();
+          if (!aiKeyword || normalized.includes(aiKeyword.replace(/[()]/g, '').trim())) {
+            return aiTech;
+          }
+        }
+        
+        // Check if acronym matches the AI tech first word
+        // e.g., "Google Cloud Platform (GCP)" matches "GCP Firestore"
+        if (acronym && aiFirstWord === acronym) {
+          return aiTech;
+        }
+      }
+      
+      return null;
+    };
+
+    // Merge with AI match status
+    const technologiesWithMatch = d1cvTechs.map(tech => {
+      const aiMatch = findAiMatch(tech.name);
+      return {
+        ...tech,
+        aiMatch,
+        hasAiMatch: aiMatch !== null,
+      };
+    });
+
+    return c.json({
+      technologies: technologiesWithMatch,
+      stats: {
+        total: d1cvTechs.length,
+        withAiMatch: technologiesWithMatch.filter(t => t.hasAiMatch).length,
+        withoutAiMatch: technologiesWithMatch.filter(t => !t.hasAiMatch).length,
+      },
+    });
+  } catch (error) {
+    console.error('D1CV technologies with AI match error:', error);
+    return errorResponse(`Failed to fetch technologies: ${error}`, 500);
+  }
+});
+
+/**
  * GET /api/d1cv/technologies/:id
  * Fetch single technology from D1CV by ID
  */
