@@ -1,0 +1,28 @@
+{
+  "name": "cv-admin-worker",
+  "version": "1.0.0",
+  "description": "Admin API for CV data management - Cloudflare Worker with D1 staging database",
+  "main": "src/index.ts",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "db:create": "wrangler d1 create cv-admin-staging",
+    "db:migrate": "wrangler d1 execute cv-admin-staging --local --file=./migrations/001_initial_schema.sql",
+    "db:migrate:remote": "wrangler d1 execute cv-admin-staging --remote --file=./migrations/001_initial_schema.sql",
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": ["cloudflare", "worker", "d1", "admin", "api"],
+  "author": "Jose Alvarez",
+  "license": "ISC",
+  "dependencies": {
+    "@hono/zod-validator": "^0.7.5",
+    "hono": "^4.10.7",
+    "zod": "^4.1.13"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20251128.0",
+    "@types/node": "^24.10.1",
+    "typescript": "^5.9.3",
+    "wrangler": "^4.51.0"
+  }
+}
