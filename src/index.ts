@@ -8,11 +8,12 @@ import { generateStableId, errorResponse, validateEntityId } from './utils';
 
 const app = new Hono<{ Bindings: Env }>();
 
-// CORS middleware
+// CORS middleware - credentials required for Zero Trust cookies
 app.use('*', cors({
   origin: ['https://admin.{YOUR_DOMAIN}', 'http://localhost:5173'],
   allowMethods: ['GET', 'POST', 'DELETE', 'OPTIONS'],
   allowHeaders: ['Content-Type', 'Authorization', 'CF-Access-JWT-Assertion'],
+  credentials: true,
   maxAge: 86400,
 }));
 
@@ -94,6 +95,27 @@ app.post('/stage', zValidator('json', StageRequestSchema), async (c) => {
   } catch (error) {
     console.error('Stage error:', error);
     return errorResponse(`Failed to stage changes: ${error}`, 500);
+  }
+});
+
+/**
+ * GET /staged/count
+ * Get count of staged changes by status
+ */
+app.get('/staged/count', async (c) => {
+  const repo = new StagingRepository(c.env.DB);
+
+  try {
+    const counts = await repo.getStatusCounts();
+    return c.json({
+      d1cvPending: counts.d1cv?.pending || 0,
+      d1cvApplied: counts.d1cv?.applied || 0,
+      aiPending: counts.ai?.pending || 0,
+      aiApplied: counts.ai?.applied || 0,
+    });
+  } catch (error) {
+    console.error('Get staged count error:', error);
+    return errorResponse(`Failed to get counts: ${error}`, 500);
   }
 });
 
@@ -402,7 +424,8 @@ app.get('/api/d1cv/technologies', async (c) => {
   }
 
   try {
-    const response = await fetch(`${d1cvUrl}/api/technologies`);
+    // D1CV uses v2 normalized endpoint with CV ID 1
+    const response = await fetch(`${d1cvUrl}/api/v2/cvs/1/technologies`);
     if (!response.ok) {
       throw new Error(`D1CV returned ${response.status}`);
     }
@@ -410,7 +433,7 @@ app.get('/api/d1cv/technologies', async (c) => {
     return c.json(data);
   } catch (error) {
     console.error('D1CV technologies error:', error);
-    return errorResponse(`Failed to fetch D1CV technologies: ${error}`, 500);
+    return errorResponse(`Failed to fetch technologies: ${error}`, 500);
   }
 });
 
