@@ -9,6 +9,29 @@ import { generateStableId, errorResponse, validateEntityId } from './utils';
 const app = new Hono<{ Bindings: Env }>();
 
 /**
+ * Purge D1CV cache for a specific entity type
+ * Called after successful mutations to invalidate cached responses
+ */
+async function purgeD1CVCache(d1cvUrl: string, entityType?: string): Promise<void> {
+  try {
+    const purgeUrl = entityType 
+      ? `${d1cvUrl}/api/cache/purge/${entityType}`
+      : `${d1cvUrl}/api/cache/purge`;
+    
+    const response = await fetch(purgeUrl, { method: 'POST' });
+    if (!response.ok) {
+      console.warn(`Cache purge failed: ${response.status}`);
+    } else {
+      const result = await response.json() as { purged: number };
+      console.log(`Cache purged: ${result.purged} entries for ${entityType || 'all'}`);
+    }
+  } catch (error) {
+    // Don't fail the mutation if cache purge fails
+    console.error('Cache purge error (non-fatal):', error);
+  }
+}
+
+/**
  * Fix encoding issues in strings (mojibake from UTF-8 misinterpretation)
  * Common issues: ÔÇô → – (en-dash), ÔÇæ → (zero-width/space)
  */
@@ -46,7 +69,7 @@ function fixEncodingInObject<T>(obj: T): T {
 // CORS middleware - credentials required for Zero Trust cookies
 app.use('*', cors({
   origin: ['https://admin.{YOUR_DOMAIN}', 'http://localhost:5173'],
-  allowMethods: ['GET', 'POST', 'DELETE', 'OPTIONS'],
+  allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowHeaders: ['Content-Type', 'Authorization', 'CF-Access-JWT-Assertion'],
   credentials: true,
   maxAge: 86400,
@@ -733,6 +756,406 @@ app.get('/api/d1cv/education', async (c) => {
   } catch (error) {
     console.error('D1CV education error:', error);
     return errorResponse(`Failed to fetch education: ${error}`, 500);
+  }
+});
+
+/**
+ * GET /api/d1cv/contact
+ * Fetch contact info from D1CV database (v2 normalized)
+ */
+app.get('/api/d1cv/contact', async (c) => {
+  const d1cvUrl = c.env.D1CV_API_URL;
+
+  if (!d1cvUrl) {
+    return errorResponse('D1CV_API_URL not configured', 500);
+  }
+
+  try {
+    const response = await fetch(`${d1cvUrl}/api/v2/cvs/1/contact`);
+    if (!response.ok) {
+      throw new Error(`D1CV returned ${response.status}`);
+    }
+    const data = await response.json();
+    return c.json(data);
+  } catch (error) {
+    console.error('D1CV contact error:', error);
+    return errorResponse(`Failed to fetch contact: ${error}`, 500);
+  }
+});
+
+/**
+ * GET /api/d1cv/profile
+ * Fetch profile info from D1CV database (v2 normalized)
+ */
+app.get('/api/d1cv/profile', async (c) => {
+  const d1cvUrl = c.env.D1CV_API_URL;
+
+  if (!d1cvUrl) {
+    return errorResponse('D1CV_API_URL not configured', 500);
+  }
+
+  try {
+    const response = await fetch(`${d1cvUrl}/api/v2/cvs/1/profile`);
+    if (!response.ok) {
+      throw new Error(`D1CV returned ${response.status}`);
+    }
+    const data = await response.json();
+    return c.json(data);
+  } catch (error) {
+    console.error('D1CV profile error:', error);
+    return errorResponse(`Failed to fetch profile: ${error}`, 500);
+  }
+});
+
+/**
+ * GET /api/d1cv/sections/:sectionType
+ * Fetch content sections (home, achievements) from D1CV database (v1 JSON blob)
+ */
+app.get('/api/d1cv/sections/:sectionType', async (c) => {
+  const d1cvUrl = c.env.D1CV_API_URL;
+  const sectionType = c.req.param('sectionType');
+
+  if (!d1cvUrl) {
+    return errorResponse('D1CV_API_URL not configured', 500);
+  }
+
+  try {
+    const response = await fetch(`${d1cvUrl}/api/cvs/1/sections/${sectionType}`);
+    if (!response.ok) {
+      throw new Error(`D1CV returned ${response.status}`);
+    }
+    const data = await response.json();
+    return c.json(data);
+  } catch (error) {
+    console.error(`D1CV ${sectionType} section error:`, error);
+    return errorResponse(`Failed to fetch ${sectionType} section: ${error}`, 500);
+  }
+});
+
+// ==========================================
+// D1CV MUTATION ENDPOINTS (Write to D1CV Worker)
+// ==========================================
+
+/**
+ * POST /api/d1cv/experience
+ * Create a new experience entry
+ */
+app.post('/api/d1cv/experience', async (c) => {
+  const d1cvUrl = c.env.D1CV_API_URL;
+
+  if (!d1cvUrl) {
+    return errorResponse('D1CV_API_URL not configured', 500);
+  }
+
+  try {
+    const body = await c.req.json();
+    const response = await fetch(`${d1cvUrl}/api/v2/cvs/1/experience`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    
+    if (!response.ok) {
+      const errorData = await response.text();
+      throw new Error(`D1CV returned ${response.status}: ${errorData}`);
+    }
+    
+    const data = await response.json();
+    
+    // Purge cache after successful creation
+    await purgeD1CVCache(d1cvUrl, 'experience');
+    
+    return c.json(data, 201);
+  } catch (error) {
+    console.error('Create experience error:', error);
+    return errorResponse(`Failed to create experience: ${error}`, 500);
+  }
+});
+
+/**
+ * PUT /api/d1cv/experience/:id
+ * Update an experience entry
+ */
+app.put('/api/d1cv/experience/:id', async (c) => {
+  const d1cvUrl = c.env.D1CV_API_URL;
+  const experienceId = c.req.param('id');
+
+  if (!d1cvUrl) {
+    return errorResponse('D1CV_API_URL not configured', 500);
+  }
+
+  try {
+    const body = await c.req.json();
+    const response = await fetch(`${d1cvUrl}/api/v2/cvs/1/experience/${experienceId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    
+    if (!response.ok) {
+      const errorData = await response.text();
+      throw new Error(`D1CV returned ${response.status}: ${errorData}`);
+    }
+    
+    const data = await response.json();
+    
+    // Purge cache after successful update
+    await purgeD1CVCache(d1cvUrl, 'experience');
+    
+    return c.json(data);
+  } catch (error) {
+    console.error('Update experience error:', error);
+    return errorResponse(`Failed to update experience: ${error}`, 500);
+  }
+});
+
+/**
+ * DELETE /api/d1cv/experience/:id
+ * Delete an experience entry (soft delete)
+ */
+app.delete('/api/d1cv/experience/:id', async (c) => {
+  const d1cvUrl = c.env.D1CV_API_URL;
+  const experienceId = c.req.param('id');
+
+  if (!d1cvUrl) {
+    return errorResponse('D1CV_API_URL not configured', 500);
+  }
+
+  try {
+    const response = await fetch(`${d1cvUrl}/api/v2/cvs/1/experience/${experienceId}`, {
+      method: 'DELETE',
+    });
+    
+    if (!response.ok) {
+      const errorData = await response.text();
+      throw new Error(`D1CV returned ${response.status}: ${errorData}`);
+    }
+    
+    const data = await response.json();
+    
+    // Purge cache after successful delete
+    await purgeD1CVCache(d1cvUrl, 'experience');
+    
+    return c.json(data);
+  } catch (error) {
+    console.error('Delete experience error:', error);
+    return errorResponse(`Failed to delete experience: ${error}`, 500);
+  }
+});
+
+/**
+ * POST /api/d1cv/education
+ * Create a new education entry
+ */
+app.post('/api/d1cv/education', async (c) => {
+  const d1cvUrl = c.env.D1CV_API_URL;
+
+  if (!d1cvUrl) {
+    return errorResponse('D1CV_API_URL not configured', 500);
+  }
+
+  try {
+    const body = await c.req.json();
+    const response = await fetch(`${d1cvUrl}/api/v2/cvs/1/education`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    
+    if (!response.ok) {
+      const errorData = await response.text();
+      throw new Error(`D1CV returned ${response.status}: ${errorData}`);
+    }
+    
+    const data = await response.json();
+    
+    // Purge cache after successful creation
+    await purgeD1CVCache(d1cvUrl, 'education');
+    
+    return c.json(data, 201);
+  } catch (error) {
+    console.error('Create education error:', error);
+    return errorResponse(`Failed to create education: ${error}`, 500);
+  }
+});
+
+/**
+ * PUT /api/d1cv/education/:id
+ * Update an education entry
+ */
+app.put('/api/d1cv/education/:id', async (c) => {
+  const d1cvUrl = c.env.D1CV_API_URL;
+  const educationId = c.req.param('id');
+
+  if (!d1cvUrl) {
+    return errorResponse('D1CV_API_URL not configured', 500);
+  }
+
+  try {
+    const body = await c.req.json();
+    const response = await fetch(`${d1cvUrl}/api/v2/cvs/1/education/${educationId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    
+    if (!response.ok) {
+      const errorData = await response.text();
+      throw new Error(`D1CV returned ${response.status}: ${errorData}`);
+    }
+    
+    const data = await response.json();
+    
+    // Purge cache after successful update
+    await purgeD1CVCache(d1cvUrl, 'education');
+    
+    return c.json(data);
+  } catch (error) {
+    console.error('Update education error:', error);
+    return errorResponse(`Failed to update education: ${error}`, 500);
+  }
+});
+
+/**
+ * DELETE /api/d1cv/education/:id
+ * Delete an education entry (soft delete)
+ */
+app.delete('/api/d1cv/education/:id', async (c) => {
+  const d1cvUrl = c.env.D1CV_API_URL;
+  const educationId = c.req.param('id');
+
+  if (!d1cvUrl) {
+    return errorResponse('D1CV_API_URL not configured', 500);
+  }
+
+  try {
+    const response = await fetch(`${d1cvUrl}/api/v2/cvs/1/education/${educationId}`, {
+      method: 'DELETE',
+    });
+    
+    if (!response.ok) {
+      const errorData = await response.text();
+      throw new Error(`D1CV returned ${response.status}: ${errorData}`);
+    }
+    
+    const data = await response.json();
+    
+    // Purge cache after successful delete
+    await purgeD1CVCache(d1cvUrl, 'education');
+    
+    return c.json(data);
+  } catch (error) {
+    console.error('Delete education error:', error);
+    return errorResponse(`Failed to delete education: ${error}`, 500);
+  }
+});
+
+/**
+ * PUT /api/d1cv/contact
+ * Update contact info (upsert - only one per CV)
+ */
+app.put('/api/d1cv/contact', async (c) => {
+  const d1cvUrl = c.env.D1CV_API_URL;
+
+  if (!d1cvUrl) {
+    return errorResponse('D1CV_API_URL not configured', 500);
+  }
+
+  try {
+    const body = await c.req.json();
+    const response = await fetch(`${d1cvUrl}/api/v2/cvs/1/contact`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    
+    if (!response.ok) {
+      const errorData = await response.text();
+      throw new Error(`D1CV returned ${response.status}: ${errorData}`);
+    }
+    
+    const data = await response.json();
+    
+    // Purge cache after successful update
+    await purgeD1CVCache(d1cvUrl, 'contact');
+    
+    return c.json(data);
+  } catch (error) {
+    console.error('Update contact error:', error);
+    return errorResponse(`Failed to update contact: ${error}`, 500);
+  }
+});
+
+/**
+ * PUT /api/d1cv/profile
+ * Update profile info (upsert - only one per CV)
+ */
+app.put('/api/d1cv/profile', async (c) => {
+  const d1cvUrl = c.env.D1CV_API_URL;
+
+  if (!d1cvUrl) {
+    return errorResponse('D1CV_API_URL not configured', 500);
+  }
+
+  try {
+    const body = await c.req.json();
+    const response = await fetch(`${d1cvUrl}/api/v2/cvs/1/profile`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    
+    if (!response.ok) {
+      const errorData = await response.text();
+      throw new Error(`D1CV returned ${response.status}: ${errorData}`);
+    }
+    
+    const data = await response.json();
+    
+    // Purge cache after successful update
+    await purgeD1CVCache(d1cvUrl, 'profile');
+    
+    return c.json(data);
+  } catch (error) {
+    console.error('Update profile error:', error);
+    return errorResponse(`Failed to update profile: ${error}`, 500);
+  }
+});
+
+/**
+ * PUT /api/d1cv/sections/:sectionType
+ * Update content section (home, achievements - JSON blob)
+ */
+app.put('/api/d1cv/sections/:sectionType', async (c) => {
+  const d1cvUrl = c.env.D1CV_API_URL;
+  const sectionType = c.req.param('sectionType');
+
+  if (!d1cvUrl) {
+    return errorResponse('D1CV_API_URL not configured', 500);
+  }
+
+  try {
+    const body = await c.req.json();
+    const response = await fetch(`${d1cvUrl}/api/v2/cvs/1/sections/${sectionType}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    
+    if (!response.ok) {
+      const errorData = await response.text();
+      throw new Error(`D1CV returned ${response.status}: ${errorData}`);
+    }
+    
+    const data = await response.json();
+    
+    // Purge cache after successful update
+    await purgeD1CVCache(d1cvUrl, 'sections');
+    
+    return c.json(data);
+  } catch (error) {
+    console.error(`Update ${sectionType} section error:`, error);
+    return errorResponse(`Failed to update ${sectionType} section: ${error}`, 500);
   }
 });
 
