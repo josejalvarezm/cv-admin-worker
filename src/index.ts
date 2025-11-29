@@ -688,6 +688,54 @@ app.get('/api/d1cv/categories', async (c) => {
   }
 });
 
+/**
+ * GET /api/d1cv/experience
+ * Fetch all experience entries from D1CV database (v2 normalized)
+ */
+app.get('/api/d1cv/experience', async (c) => {
+  const d1cvUrl = c.env.D1CV_API_URL;
+
+  if (!d1cvUrl) {
+    return errorResponse('D1CV_API_URL not configured', 500);
+  }
+
+  try {
+    const response = await fetch(`${d1cvUrl}/api/v2/cvs/1/experience`);
+    if (!response.ok) {
+      throw new Error(`D1CV returned ${response.status}`);
+    }
+    const data = await response.json();
+    return c.json(data);
+  } catch (error) {
+    console.error('D1CV experience error:', error);
+    return errorResponse(`Failed to fetch experience: ${error}`, 500);
+  }
+});
+
+/**
+ * GET /api/d1cv/education
+ * Fetch all education entries from D1CV database (v2 normalized)
+ */
+app.get('/api/d1cv/education', async (c) => {
+  const d1cvUrl = c.env.D1CV_API_URL;
+
+  if (!d1cvUrl) {
+    return errorResponse('D1CV_API_URL not configured', 500);
+  }
+
+  try {
+    const response = await fetch(`${d1cvUrl}/api/v2/cvs/1/education`);
+    if (!response.ok) {
+      throw new Error(`D1CV returned ${response.status}`);
+    }
+    const data = await response.json();
+    return c.json(data);
+  } catch (error) {
+    console.error('D1CV education error:', error);
+    return errorResponse(`Failed to fetch education: ${error}`, 500);
+  }
+});
+
 // ==========================================
 // AI AGENT DATA ENDPOINTS (Read from cv-ai-agent Worker)
 // ==========================================
