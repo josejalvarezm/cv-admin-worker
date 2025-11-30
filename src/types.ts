@@ -4,29 +4,63 @@
 export interface Env {
   // D1 Staging Database
   DB: D1Database;
-  
+
+  // D1CV Production Database (for applying changes)
+  D1CV_DB: D1Database;
+
+  // Durable Object for job orchestration
+  JOB_ORCHESTRATOR: DurableObjectNamespace;
+
   // API URLs for target systems
   D1CV_API_URL: string;
   AI_AGENT_API_URL: string;
-  
+
   // Auth
   ALLOWED_EMAILS: string;
+
+  // Webhook secret for HMAC signing
+  WEBHOOK_SECRET?: string;
 }
 
 /**
- * Staging operation types
+ * Staging operation types (legacy)
  */
 export type Operation = 'INSERT' | 'UPDATE' | 'DELETE';
 
 /**
- * Staging status types
+ * Git-like action types
+ */
+export type Action = 'CREATE' | 'UPDATE' | 'DELETE';
+
+/**
+ * Target systems for staging
+ */
+export type Target = 'd1cv' | 'ai-agent' | 'both';
+
+/**
+ * Commit status (git-like workflow)
+ */
+export type CommitStatus =
+  | 'pending'       // Created, not pushed yet
+  | 'applied_d1cv'  // Pushed to D1CV, pending AI Agent
+  | 'applied_ai'    // Pushed to AI Agent only
+  | 'applied_all'   // Fully synced to both targets
+  | 'failed';       // Push failed
+
+/**
+ * Job status for async operations
+ */
+export type JobStatus = 'pending' | 'processing' | 'completed' | 'failed' | 'timeout';
+
+/**
+ * Staging status types (legacy)
  */
 export type StagingStatus = 'pending' | 'applied' | 'failed' | 'skipped';
 
 /**
  * Entity types that can be staged
  */
-export type EntityType = 'technology' | 'experience' | 'education' | 'profile' | 'contact';
+export type EntityType = 'technology' | 'experience' | 'education' | 'project' | 'profile' | 'contact';
 
 /**
  * Staged change for D1CV database
@@ -136,5 +170,109 @@ export interface ApplyResult {
   stable_id?: string;
   operation: Operation;
   status: 'applied' | 'failed';
+  error?: string;
+}
+
+// ==========================================
+// GIT-LIKE COMMIT & STAGING TYPES
+// ==========================================
+
+/**
+ * Commit (groups staged changes)
+ */
+export interface Commit {
+  id: string;
+  message: string | null;
+  status: CommitStatus;
+  created_by: string;
+  created_at: string;
+  applied_d1cv_at: string | null;
+  applied_ai_at: string | null;
+  applied_by: string | null;
+  error_target: 'd1cv' | 'ai-agent' | null;
+  error_message: string | null;
+}
+
+/**
+ * Commit with changes included
+ */
+export interface CommitWithChanges extends Commit {
+  changes: StagedChange[];
+}
+
+/**
+ * Staged change (individual operation)
+ */
+export interface StagedChange {
+  id: string;
+  commit_id: string | null;
+  target: Target;
+  entity_type: EntityType;
+  action: Action;
+  entity_id: string | null;
+  stable_id: string | null;
+  payload: string | null;  // JSON string
+  summary: string | null;
+  created_by: string;
+  created_at: string;
+}
+
+/**
+ * Job for async push operations
+ */
+export interface Job {
+  id: string;
+  commit_id: string;
+  target: 'd1cv' | 'ai-agent';
+  status: JobStatus;
+  started_at: string;
+  completed_at: string | null;
+  result: string | null;  // JSON string
+  error_message: string | null;
+  callback_url: string | null;
+}
+
+/**
+ * Stage request (new git-like)
+ */
+export interface StageChangeRequest {
+  action: Action;
+  target: Target;
+  entity_type: EntityType;
+  entity_id?: string | null;
+  stable_id?: string | null;
+  payload?: Record<string, unknown>;
+  summary?: string;
+}
+
+/**
+ * Commit request
+ */
+export interface CreateCommitRequest {
+  message: string;
+  staged_ids: string[];
+}
+
+/**
+ * Push request
+ */
+export interface PushRequest {
+  commit_id: string;
+}
+
+/**
+ * Job result (webhook payload)
+ */
+export interface JobResult {
+  job_id: string;
+  status: 'completed' | 'failed';
+  result?: {
+    inserted: number;
+    updated: number;
+    deleted: number;
+    d1_count?: number;
+    vector_count?: number;
+    synced?: boolean;
+  };
   error?: string;
 }

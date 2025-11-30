@@ -59,9 +59,16 @@ export function errorResponse(message: string, status: number = 400): Response {
 }
 
 /**
- * Validate that entity_id is provided for UPDATE/DELETE operations
+ * Validate that entity_id or entity_name is provided for UPDATE/DELETE operations
+ * D1CV technologies use name as identifier, not numeric ID
  */
-export function validateEntityId(operation: string, entityId: number | null | undefined): boolean {
+export function validateEntityId(
+  operation: string,
+  entityId: number | null | undefined,
+  entityName?: string | null
+): boolean {
   if (operation === 'INSERT') return true;
-  return entityId !== null && entityId !== undefined;
+  // For UPDATE/DELETE, need either entity_id or entity_name
+  return (entityId !== null && entityId !== undefined) ||
+    (entityName !== null && entityName !== undefined && entityName !== '');
 }

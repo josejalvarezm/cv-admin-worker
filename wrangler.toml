@@ -2,13 +2,34 @@ name = "cv-admin-worker"
 main = "src/index.ts"
 compatibility_date = "2024-11-01"
 
+# Custom domain (requires DNS CNAME to workers.dev in Cloudflare)
+routes = [
+  { pattern = "api.admin.{YOUR_DOMAIN}", custom_domain = true }
+]
+
 # D1 Staging Database
 [[d1_databases]]
 binding = "DB"
 database_name = "cv-admin-staging"
 database_id = "{ADMIN_WORKER_DATABASE_ID}"
 
+# D1CV Production Database (for applying changes)
+[[d1_databases]]
+binding = "D1CV_DB"
+database_name = "cv-database"
+database_id = "{D1_CV_DATABASE_ID}"
+
+# Durable Objects for job orchestration
+[[durable_objects.bindings]]
+name = "JOB_ORCHESTRATOR"
+class_name = "JobOrchestrator"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["JobOrchestrator"]
+
 # Environment variables (set via wrangler secret)
 # D1CV_API_URL - URL for D1CV worker
 # AI_AGENT_API_URL - URL for cv-ai-agent worker
 # ALLOWED_EMAILS - Comma-separated list of allowed emails
+# WEBHOOK_SECRET - HMAC secret for webhook signatures

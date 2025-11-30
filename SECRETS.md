@@ -46,14 +46,66 @@ For Zero Trust protection on `admin.{YOUR_DOMAIN}`:
 ## Set Secrets Commands
 
 ```powershell
-cd D:\Code\cv-admin-worker
+cd D:\Code\cv-admin-worker-private
 
 # Set secrets via Wrangler
-echo "https://api.d1.worker.{YOUR_DOMAIN}" | npx wrangler secret put D1CV_API_URL
-echo "https://cv-ai-agent.{YOUR_WORKERS_SUBDOMAIN}" | npx wrangler secret put AI_AGENT_API_URL
-echo "{YOUR_EMAIL}" | npx wrangler secret put ALLOWED_EMAILS
+wrangler secret put D1CV_API_URL
+# Enter: https://api.d1.worker.{YOUR_DOMAIN}
+
+wrangler secret put AI_AGENT_API_URL
+# Enter: https://cv-ai-agent.{YOUR_WORKERS_SUBDOMAIN}
+
+wrangler secret put ALLOWED_EMAILS
+# Enter: {YOUR_EMAIL}
+
+# NEW: Webhook secret for HMAC signature verification
+wrangler secret put WEBHOOK_SECRET
+# Enter: (generate with command below)
+```
+
+### Generate Webhook Secret
+
+```powershell
+# Generate secure 32-byte base64 secret
+[System.Convert]::ToBase64String([System.Security.Cryptography.RandomNumberGenerator]::GetBytes(32))
+```
+
+### cv-ai-agent Webhook Secret
+
+The AI Agent needs the same secret to sign webhook callbacks:
+
+```powershell
+cd D:\Code\cv-ai-agent-private
+
+wrangler secret put ADMIN_WEBHOOK_SECRET
+# Enter: (same value as WEBHOOK_SECRET above)
 ```
 
 ---
 
-**Last Updated:** 2025-11-28
+## Webhook Flow
+
+```
+cv-admin-worker                    cv-ai-agent
+     │                                  │
+     │  POST /api/admin/apply           │
+     │  {job_id, operations,            │
+     │   callback_url}                  │
+     ├─────────────────────────────────►│
+     │                                  │
+     │                          Process operations
+     │                          (D1 + Vectorize)
+     │                                  │
+     │  POST /v2/webhook                │
+     │  X-Webhook-Signature: <hmac>     │
+     │  {jobId, source, status}         │
+     │◄─────────────────────────────────┤
+     │                                  │
+  Verify HMAC                           │
+  Update job status                     │
+  Notify WebSocket                      │
+```
+
+---
+
+**Last Updated:** 2025-11-29
