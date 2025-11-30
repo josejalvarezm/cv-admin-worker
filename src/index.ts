@@ -1282,7 +1282,7 @@ const applyAiHandler = async (c: any) => {
     // Categorize pending changes by operation type
     for (const staged of pending) {
       const payload = staged.payload ? JSON.parse(staged.payload) : {};
-      
+
       if (staged.operation === 'INSERT') {
         operations.inserts.push({
           stable_id: staged.stable_id || payload.stable_id,
@@ -1300,7 +1300,7 @@ const applyAiHandler = async (c: any) => {
 
     // Call AI Agent admin/apply endpoint with batch operations
     const jobId = `apply_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
-    
+
     try {
       const response = await fetch(`${aiAgentUrl}/api/admin/apply`, {
         method: 'POST',
