@@ -2278,6 +2278,30 @@ app.get('/api/ai-agent/technologies/:stableId', async (c) => {
 });
 
 /**
+ * GET /api/ai-agent/categories
+ * Fetch distinct categories from cv-ai-agent for dropdown population
+ */
+app.get('/api/ai-agent/categories', async (c) => {
+  const aiAgentUrl = c.env.AI_AGENT_API_URL;
+
+  if (!aiAgentUrl) {
+    return errorResponse('AI_AGENT_API_URL not configured', 500);
+  }
+
+  try {
+    const response = await fetch(`${aiAgentUrl}/api/categories`);
+    if (!response.ok) {
+      throw new Error(`AI Agent returned ${response.status}`);
+    }
+    const data = await response.json();
+    return c.json(data);
+  } catch (error) {
+    console.error('AI Agent categories error:', error);
+    return errorResponse(`Failed to fetch AI Agent categories: ${error}`, 500);
+  }
+});
+
+/**
  * GET /api/ai-agent/vectorize/status
  * Get Vectorize index status from cv-ai-agent
  */
