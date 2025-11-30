@@ -1265,16 +1265,85 @@ const applyAiHandler = async (c: any) => {
 
     let applied = 0;
     let failed = 0;
+    const errors: string[] = [];
     const startTime = Date.now();
 
+    // Build operations object for AI Agent batch apply
+    const operations: {
+      inserts: Record<string, unknown>[];
+      updates: { id: string; changes: Record<string, unknown> }[];
+      deletes: string[];
+    } = {
+      inserts: [],
+      updates: [],
+      deletes: [],
+    };
+
+    // Categorize pending changes by operation type
     for (const staged of pending) {
-      try {
-        // TODO: Call cv-ai-agent API to apply the change
-        // For now, just mark as applied
-        await repo.updateAIAgentStatus(staged.id, 'applied');
-        applied++;
-      } catch (error) {
-        await repo.updateAIAgentStatus(staged.id, 'failed', String(error));
+      const payload = staged.payload ? JSON.parse(staged.payload) : {};
+      
+      if (staged.operation === 'INSERT') {
+        operations.inserts.push({
+          stable_id: staged.stable_id || payload.stable_id,
+          ...payload,
+        });
+      } else if (staged.operation === 'UPDATE') {
+        operations.updates.push({
+          id: staged.stable_id || staged.entity_id || '',
+          changes: payload,
+        });
+      } else if (staged.operation === 'DELETE') {
+        operations.deletes.push(staged.stable_id || staged.entity_id || '');
+      }
+    }
+
+    // Call AI Agent admin/apply endpoint with batch operations
+    const jobId = `apply_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+    
+    try {
+      const response = await fetch(`${aiAgentUrl}/api/admin/apply`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          job_id: jobId,
+          operations,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`AI Agent returned ${response.status}: ${errorText}`);
+      }
+
+      const result = await response.json() as {
+        success: boolean;
+        inserted: number;
+        updated: number;
+        deleted: number;
+        message: string;
+      };
+
+      // Mark all pending as applied if AI Agent succeeded
+      if (result.success) {
+        for (const staged of pending) {
+          await repo.updateAIAgentStatus(staged.id, 'applied');
+          applied++;
+        }
+      } else {
+        // Mark as failed if AI Agent reported failure
+        for (const staged of pending) {
+          await repo.updateAIAgentStatus(staged.id, 'failed', result.message);
+          failed++;
+        }
+        errors.push(result.message);
+      }
+    } catch (fetchError) {
+      // Network or parsing error - mark all as failed
+      const errorMsg = fetchError instanceof Error ? fetchError.message : String(fetchError);
+      errors.push(errorMsg);
+      for (const staged of pending) {
+        await repo.updateAIAgentStatus(staged.id, 'failed', errorMsg);
         failed++;
       }
     }
@@ -1282,11 +1351,12 @@ const applyAiHandler = async (c: any) => {
     const durationMs = Date.now() - startTime;
 
     return c.json({
-      success: true,
+      success: failed === 0,
       applied,
       failed,
       reindexed: applied > 0,
       duration_ms: durationMs,
+      errors: errors.length > 0 ? errors : undefined,
       message: `Applied ${applied} AI changes, ${failed} failed`,
     });
   } catch (error) {
