@@ -83,7 +83,7 @@ graph TB
 ### 3. cv-ai-agent (Semantic Search Engine)
 
 **Repository:** `cv-ai-agent-private`  
-**URL:** `https://cv-assistant-worker.{YOUR_WORKERS_SUBDOMAIN}`  
+**URL:** `https://cv-assistant-worker-production.{YOUR_WORKERS_SUBDOMAIN}`  
 **Stack:** TypeScript, Cloudflare Workers, D1, Vectorize, Workers AI
 
 | Responsibility | Description |
@@ -275,7 +275,7 @@ npx wrangler secret put D1CV_API_URL
 
 # AI Agent API for semantic search (CORRECTED 2025-12-01)
 npx wrangler secret put AI_AGENT_API_URL
-# Value: https://cv-assistant-worker.{YOUR_WORKERS_SUBDOMAIN}
+# Value: https://cv-assistant-worker-production.{YOUR_WORKERS_SUBDOMAIN}
 
 # Authorised admin emails
 npx wrangler secret put ALLOWED_EMAILS
@@ -322,17 +322,17 @@ cd D:\Code\cv-ai-agent-private\cv-skills-ops
 1. **Check AI_AGENT_API_URL secret is correct:**
    ```powershell
    # Correct URL (as of 2025-12-01):
-   # https://cv-assistant-worker.{YOUR_WORKERS_SUBDOMAIN}
+   # https://cv-assistant-worker-production.{YOUR_WORKERS_SUBDOMAIN}
    ```
 
 2. **Verify AI Agent is healthy:**
    ```powershell
-   Invoke-RestMethod -Uri "https://cv-assistant-worker.{YOUR_WORKERS_SUBDOMAIN}/health"
+   Invoke-RestMethod -Uri "https://cv-assistant-worker-production.{YOUR_WORKERS_SUBDOMAIN}/health"
    ```
 
 3. **Check AI quota:**
    ```powershell
-   Invoke-RestMethod -Uri "https://cv-assistant-worker.{YOUR_WORKERS_SUBDOMAIN}/api/admin/quota"
+   Invoke-RestMethod -Uri "https://cv-assistant-worker-production.{YOUR_WORKERS_SUBDOMAIN}/api/admin/quota"
    ```
 
 ### D1CV Apply Failing

@@ -12,13 +12,13 @@
 | Secret | Value | Description |
 |--------|-------|-------------|
 | `D1CV_API_URL` | `https://api.d1.worker.{YOUR_DOMAIN}` | D1CV Worker API (portfolio data) |
-| `AI_AGENT_API_URL` | `https://cv-assistant-worker.{YOUR_WORKERS_SUBDOMAIN}` | AI Agent Worker API (semantic search) |
+| `AI_AGENT_API_URL` | `https://cv-assistant-worker-production.{YOUR_WORKERS_SUBDOMAIN}` | AI Agent Worker API (semantic search) |
 | `ALLOWED_EMAILS` | `{YOUR_EMAIL}` | Authorised admin emails |
 | `WEBHOOK_SECRET` | (generated) | HMAC secret for webhook signatures |
 
 > ⚠️ **IMPORTANT**: The AI Agent URL was corrected on 2025-12-01.  
 > Old (broken): `https://cv-ai-agent.{YOUR_WORKERS_SUBDOMAIN}`  
-> New (correct): `https://cv-assistant-worker.{YOUR_WORKERS_SUBDOMAIN}`
+> New (correct): `https://cv-assistant-worker-production.{YOUR_WORKERS_SUBDOMAIN}`
 
 ### D1 Database
 
@@ -45,7 +45,7 @@ For Zero Trust protection on `admin.{YOUR_DOMAIN}`:
 | cv-admin-worker | `https://api.admin.{YOUR_DOMAIN}` | Cloudflare Access |
 | cv-admin-portal | `https://admin.{YOUR_DOMAIN}` | Cloudflare Access |
 | D1CV | `https://api.d1.worker.{YOUR_DOMAIN}` | Public read |
-| cv-ai-agent | `https://cv-assistant-worker.{YOUR_WORKERS_SUBDOMAIN}` | Public |
+| cv-ai-agent | `https://cv-assistant-worker-production.{YOUR_WORKERS_SUBDOMAIN}` | Public |
 
 ---
 
