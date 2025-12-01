@@ -1,7 +1,13 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { zValidator } from '@hono/zod-validator';
-import type { Env, StageResponse, SimilarityMatch } from './types';
+import type { 
+  Env, 
+  StageResponse, 
+  SimilarityMatch,
+  D1CVTechnologiesResponse,
+  AdminTechnology 
+} from './types';
 import { StageRequestSchema, StageChangeRequestSchema, CreateCommitRequestSchema, PushRequestSchema } from './schemas';
 import { StagingRepository, CommitRepository } from './repository';
 import { generateStableId, errorResponse, validateEntityId } from './utils';
@@ -36,43 +42,6 @@ app.get('/', (c) => {
 // Proxy read requests to D1CV worker for unified auth
 // Transforms D1CV v2 API responses to Admin Portal format
 // ==========================================
-
-// Types for D1CV responses
-interface D1CVTechCategory {
-  name: string;
-  icon: string;
-  technologies: Array<{
-    name: string;
-    experience: string;
-    experienceYears: number;
-    proficiencyPercent: number;
-    level: string;
-  }>;
-}
-
-interface D1CVTechnologiesResponse {
-  heroSkills: Array<{
-    name: string;
-    experience: string;
-    experienceYears: number;
-    proficiencyPercent: number;
-    level: string;
-    icon: string;
-  }>;
-  technologyCategories: D1CVTechCategory[];
-}
-
-interface AdminTechnology {
-  id: number;
-  name: string;
-  experience: string;
-  experience_years: number;
-  proficiency_percent: number;
-  level: string;
-  category: string;
-  category_id: number;
-  is_active: boolean;
-}
 
 /**
  * GET /api/technologies

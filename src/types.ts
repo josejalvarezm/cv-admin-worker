@@ -276,3 +276,50 @@ export interface JobResult {
   };
   error?: string;
 }
+
+// ==========================================
+// D1CV RESPONSE TYPES
+// ==========================================
+
+/**
+ * D1CV technology within a category response
+ */
+export interface D1CVTechItem {
+  name: string;
+  experience: string;
+  experienceYears: number;
+  proficiencyPercent: number;
+  level: string;
+}
+
+/**
+ * D1CV technology category response
+ */
+export interface D1CVTechCategory {
+  name: string;
+  icon: string;
+  technologies: D1CVTechItem[];
+}
+
+/**
+ * D1CV technologies endpoint response
+ */
+export interface D1CVTechnologiesResponse {
+  heroSkills: Array<D1CVTechItem & { icon: string }>;
+  technologyCategories: D1CVTechCategory[];
+}
+
+/**
+ * Admin portal technology format (flat structure)
+ */
+export interface AdminTechnology {
+  id: number;
+  name: string;
+  experience: string;
+  experience_years: number;
+  proficiency_percent: number;
+  level: string;
+  category: string;
+  category_id: number;
+  is_active: boolean;
+}
