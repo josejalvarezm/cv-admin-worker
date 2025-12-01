@@ -1026,11 +1026,8 @@ const getUnifiedTechnologyHandler = async (c: any) => {
     // 3. If AI not found in staging, check AI Agent production (only if we have production D1CV)
     if (response.d1cv.found && !response.aiAgent.found) {
       try {
-        const stableId = name.toLowerCase()
-          .replace(/[^a-z0-9]+/g, '-')
-          .replace(/^-+|-+$/g, '');
-
-        const aiResponse = await fetch(`${aiAgentUrl}/api/technologies/${encodeURIComponent(stableId)}`);
+        // Use the technology name directly - AI Agent now supports lookup by name
+        const aiResponse = await fetch(`${aiAgentUrl}/api/technologies/${encodeURIComponent(name)}`);
         if (aiResponse.ok) {
           const aiData = await aiResponse.json() as Record<string, unknown>;
           response.aiAgent.found = true;
