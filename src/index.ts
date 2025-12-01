@@ -5,69 +5,12 @@ import type { Env, StageResponse, SimilarityMatch } from './types';
 import { StageRequestSchema, StageChangeRequestSchema, CreateCommitRequestSchema, PushRequestSchema } from './schemas';
 import { StagingRepository, CommitRepository } from './repository';
 import { generateStableId, errorResponse, validateEntityId } from './utils';
+import { fixEncodingInObject, purgeD1CVCache } from './helpers';
 
 // Export Durable Object
 export { JobOrchestrator } from './durable-objects/JobOrchestrator';
 
 const app = new Hono<{ Bindings: Env }>();
-
-/**
- * Purge D1CV cache for a specific entity type
- * Called after successful mutations to invalidate cached responses
- */
-async function purgeD1CVCache(d1cvUrl: string, entityType?: string): Promise<void> {
-  try {
-    const purgeUrl = entityType
-      ? `${d1cvUrl}/api/cache/purge/${entityType}`
-      : `${d1cvUrl}/api/cache/purge`;
-
-    const response = await fetch(purgeUrl, { method: 'POST' });
-    if (!response.ok) {
-      console.warn(`Cache purge failed: ${response.status}`);
-    } else {
-      const result = await response.json() as { purged: number };
-      console.log(`Cache purged: ${result.purged} entries for ${entityType || 'all'}`);
-    }
-  } catch (error) {
-    // Don't fail the mutation if cache purge fails
-    console.error('Cache purge error (non-fatal):', error);
-  }
-}
-
-/**
- * Fix encoding issues in strings (mojibake from UTF-8 misinterpretation)
- * Common issues: ÔÇô → – (en-dash), ÔÇæ → (zero-width/space)
- */
-function fixEncoding(text: string | null | undefined): string | null {
-  if (!text) return text as null;
-  return text
-    .replace(/ÔÇô/g, '–')      // en-dash
-    .replace(/ÔÇæ/g, '-')       // zero-width joiner → regular hyphen
-    .replace(/ÔÇö/g, '—')       // em-dash
-    .replace(/ÔÇÿ/g, "'")       // smart quote
-    .replace(/ÔÇ£/g, '"')       // smart quote open
-    .replace(/ÔÇØ/g, '"');      // smart quote close
-}
-
-/**
- * Recursively fix encoding issues in an object
- */
-function fixEncodingInObject<T>(obj: T): T {
-  if (typeof obj === 'string') {
-    return fixEncoding(obj) as T;
-  }
-  if (Array.isArray(obj)) {
-    return obj.map(item => fixEncodingInObject(item)) as T;
-  }
-  if (obj && typeof obj === 'object') {
-    const fixed: Record<string, unknown> = {};
-    for (const [key, value] of Object.entries(obj)) {
-      fixed[key] = fixEncodingInObject(value);
-    }
-    return fixed as T;
-  }
-  return obj;
-}
 
 // CORS middleware - credentials required for Zero Trust cookies
 app.use('*', cors({
