@@ -490,8 +490,20 @@ app.post('/stage', zValidator('json', StageRequestSchema), async (c) => {
     let aiId: number | null = null;
     let stableId: string | null = null;
 
-    // Stage AI Agent change if AI payload provided
-    if (body.ai_payload && body.ai_payload.summary) {
+    // Stage AI Agent change for DELETE operations (need stable_id to remove from Vectorize)
+    if (body.operation === 'DELETE') {
+      // For deletes, we need the stable_id to identify what to remove from AI
+      stableId = body.ai_payload?.stable_id ?? generateStableId(body.d1cv_payload.name);
+      
+      aiId = await repo.createStagedAIAgent(
+        'DELETE',
+        stableId,
+        { name: body.d1cv_payload.name, stable_id: stableId },
+        d1cvId
+      );
+    }
+    // Stage AI Agent change if AI payload provided (INSERT/UPDATE)
+    else if (body.ai_payload && body.ai_payload.summary) {
       stableId = body.ai_payload.stable_id ?? generateStableId(body.d1cv_payload.name);
 
       const enrichedAIPayload = {
