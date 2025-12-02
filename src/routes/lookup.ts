@@ -22,6 +22,7 @@ const lookup = new Hono<{ Bindings: Env }>();
  */
 const getUnifiedTechnologyHandler = async (c: any) => {
   const name = decodeURIComponent(c.req.param('name'));
+  const aiId = c.req.query('aiId');
   const d1cvDb = c.env.D1CV_DB;
   const repo = new StagingRepository(c.env.DB);
   const aiAgentUrl = c.env.AI_AGENT_URL || 'https://cv.{YOUR_DOMAIN}';
@@ -136,15 +137,75 @@ const getUnifiedTechnologyHandler = async (c: any) => {
     // 3. If AI not found in staging, check AI Agent production (only if we have production D1CV)
     if (response.d1cv.found && !response.aiAgent.found) {
       try {
-        // Use the technology name directly - AI Agent now supports lookup by name
-        const aiResponse = await fetch(
-          `${aiAgentUrl}/api/technologies/${encodeURIComponent(name)}`
-        );
-        if (aiResponse.ok) {
-          const aiData = (await aiResponse.json()) as Record<string, unknown>;
-          response.aiAgent.found = true;
-          response.aiAgent.source = 'production';
-          response.aiAgent.data = aiData;
+        // Fetch all AI technologies
+        const aiAgentResponse = await fetch(`${aiAgentUrl}/api/technologies`);
+        if (aiAgentResponse.ok) {
+          const aiAgentData = (await aiAgentResponse.json()) as {
+            data?: Record<string, unknown>[];
+            technologies?: Record<string, unknown>[];
+          };
+          const aiTechs = aiAgentData.data || aiAgentData.technologies || [];
+
+          // If aiId provided, find by ID directly (faster, no fuzzy matching needed)
+          if (aiId) {
+            const numericId = parseInt(aiId, 10);
+            const matchedTech = aiTechs.find(
+              (tech) => tech.id === numericId || tech.stable_id === aiId
+            );
+            if (matchedTech) {
+              response.aiAgent.found = true;
+              response.aiAgent.source = 'production';
+              response.aiAgent.data = matchedTech;
+            }
+          } else {
+            // Otherwise use fuzzy matching (fallback when aiId not provided)
+
+            // Fuzzy matching function (same logic as d1cv.ts)
+            const findAiMatch = (d1cvName: string): Record<string, unknown> | null => {
+              const normalized = d1cvName.toLowerCase().trim();
+
+              // Try exact match first
+              for (const aiTech of aiTechs) {
+                if ((aiTech.name as string).toLowerCase().trim() === normalized) {
+                  return aiTech;
+                }
+              }
+
+              // Extract acronym from parentheses if present
+              const acronymMatch = normalized.match(/\(([^)]+)\)/);
+              const acronym = acronymMatch ? acronymMatch[1].toLowerCase() : null;
+
+              // Try fuzzy match
+              for (const aiTech of aiTechs) {
+                const aiName = (aiTech.name as string).toLowerCase().trim();
+                const aiFirstWord = aiName.split(/[\s(]/)[0];
+                const d1cvFirstWord = normalized.split(/[\s(]/)[0];
+
+                if (aiFirstWord === d1cvFirstWord && aiFirstWord.length >= 2) {
+                  const aiKeyword = aiName.replace(aiFirstWord, '').trim();
+                  if (
+                    !aiKeyword ||
+                    normalized.includes(aiKeyword.replace(/[()]/g, '').trim())
+                  ) {
+                    return aiTech;
+                  }
+                }
+
+                if (acronym && aiFirstWord === acronym) {
+                  return aiTech;
+                }
+              }
+
+              return null;
+            };
+
+            const aiMatch = findAiMatch(name);
+            if (aiMatch) {
+              response.aiAgent.found = true;
+              response.aiAgent.source = 'production';
+              response.aiAgent.data = aiMatch;
+            }
+          }
         }
       } catch (error) {
         console.warn('AI Agent lookup failed (non-fatal):', error);
