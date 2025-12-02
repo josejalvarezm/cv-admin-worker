@@ -76,6 +76,11 @@ The `/api/technology/unified/:name` endpoint fetches data from all sources in on
 - AI Agent production
 - Staging tables
 
+Supports optional `aiId` query parameter for direct AI Agent lookup (skips fuzzy matching):
+```
+/api/technology/unified/JavaScript?aiId=123
+```
+
 ### Git-like Workflow (v2 API)
 Changes go through a staging workflow:
 1. `POST /v2/stage` - Stage a change
@@ -171,6 +176,7 @@ Invoke-RestMethod "https://api.admin.{YOUR_DOMAIN}/v2/stats"
 
 ## Version History
 
+- **v1.6.1** - Unified lookup aiId optimization (direct AI Agent lookup by ID)
 - **v1.6.0** - SOLID refactoring complete (2908 lines extracted from index.ts)
 - **v1.5.0** - Earlier version
 - **v1.0.0** - Initial release
