@@ -1,4 +1,4 @@
-import { Hono } from 'hono';
+import { Hono, type Context } from 'hono';
 import type { Env, SimilarityMatch } from '../types';
 import { StagingRepository } from '../repository';
 import { errorResponse } from '../utils';
@@ -20,12 +20,12 @@ const lookup = new Hono<{ Bindings: Env }>();
  * Returns a combined response indicating what data exists where,
  * reducing the need for multiple round-trips from the client.
  */
-const getUnifiedTechnologyHandler = async (c: any) => {
+const getUnifiedTechnologyHandler = async (c: Context<{ Bindings: Env }>) => {
   const name = decodeURIComponent(c.req.param('name'));
   const aiId = c.req.query('aiId');
   const d1cvDb = c.env.D1CV_DB;
   const repo = new StagingRepository(c.env.DB);
-  const aiAgentUrl = c.env.AI_AGENT_URL || 'https://cv.{YOUR_DOMAIN}';
+  const aiAgentUrl = c.env.AI_AGENT_API_URL || 'https://cv.{YOUR_DOMAIN}';
 
   const response: {
     found: boolean;

@@ -9,9 +9,18 @@
     "db:create": "wrangler d1 create cv-admin-staging",
     "db:migrate": "wrangler d1 execute cv-admin-staging --local --file=./migrations/001_initial_schema.sql",
     "db:migrate:remote": "wrangler d1 execute cv-admin-staging --remote --file=./migrations/001_initial_schema.sql",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
   },
-  "keywords": ["cloudflare", "worker", "d1", "admin", "api"],
+  "keywords": [
+    "cloudflare",
+    "worker",
+    "d1",
+    "admin",
+    "api"
+  ],
   "author": "Jose Alvarez",
   "license": "ISC",
   "dependencies": {
@@ -22,7 +31,9 @@
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20251128.0",
     "@types/node": "^24.10.1",
+    "@vitest/coverage-v8": "^4.0.15",
     "typescript": "^5.9.3",
+    "vitest": "^4.0.15",
     "wrangler": "^4.51.0"
   }
 }

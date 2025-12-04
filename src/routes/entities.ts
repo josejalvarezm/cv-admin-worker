@@ -68,7 +68,7 @@ entities.post('/api/d1cv/cache/purge', async (c) => {
             throw new Error(`D1CV cache purge returned ${response.status}`);
         }
 
-        const data = await response.json();
+        const data = await response.json() as Record<string, unknown>;
         return c.json({
             success: true,
             message: 'Portfolio cache purged successfully',

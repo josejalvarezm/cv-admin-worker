@@ -6,7 +6,7 @@
  * - Apply AI Agent changes
  */
 
-import { Hono } from 'hono';
+import { Hono, type Context } from 'hono';
 import type { Env } from '../types';
 import { StagingRepository } from '../repository';
 import { errorResponse } from '../utils';
@@ -19,7 +19,7 @@ const apply = new Hono<{ Bindings: Env }>();
  * POST /api/apply/d1cv
  * Apply pending D1CV changes to the D1CV database
  */
-const applyD1cvHandler = async (c: any) => {
+const applyD1cvHandler = async (c: Context<{ Bindings: Env }>) => {
     const repo = new StagingRepository(c.env.DB);
     const d1cvDb = c.env.D1CV_DB;
 
