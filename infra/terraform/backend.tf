@@ -4,7 +4,7 @@
 terraform {
   cloud {
     organization = "josejalvarezmterraform"
-    
+
     workspaces {
       name = "cv-admin-worker"
     }
