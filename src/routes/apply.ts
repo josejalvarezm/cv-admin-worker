@@ -129,7 +129,7 @@ apply.post('/api/apply/d1cv', applyD1cvHandler);
  * POST /api/apply/ai
  * Apply pending AI Agent changes and trigger reindexing
  */
-const applyAiHandler = async (c: any) => {
+const applyAiHandler = async (c: Context<{ Bindings: Env }>) => {
     const repo = new StagingRepository(c.env.DB);
     const aiAgentUrl = c.env.AI_AGENT_API_URL;
 
